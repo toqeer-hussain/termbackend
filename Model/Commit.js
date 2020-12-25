@@ -2,9 +2,10 @@
 var mongoose=require("mongoose")
 var {UserSchema}=require('./User')
 let Commit= new mongoose.Schema({
-    Commit:[
-       { User:{UserSchema},Message:{type: String}}
-    ],
+   
+        User:{type:String,default:"Anonymous"}
+       ,Message:{type: String},
+    Date:Date
     
 },{timestamps:true})
 

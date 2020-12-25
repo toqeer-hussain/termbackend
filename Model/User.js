@@ -1,4 +1,5 @@
 var mongoose=require("mongoose")
+var bcrypt = require("bcryptjs");
 mongoose.connect(`mongodb+srv://toqeer_12:toqeerali12@cluster0.h1s3r.mongodb.net/Main?retryWrites=true&w=majority`, {useNewUrlParser: true,useUnifiedTopology: true});
 let UserSchema= new mongoose.Schema({
     UserName:String,
@@ -15,6 +16,11 @@ let UserSchema= new mongoose.Schema({
     }
 
 },{timestamps:true})
+
+UserSchema.methods.generateHashedPassword = async function () {
+    let salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  }
 
 let User=mongoose.model("User",UserSchema)
 module.exports={User,UserSchema}

@@ -2,10 +2,16 @@
 var mongoose=require("mongoose")
 
 var {ProductSchema}=require('./Product')
+const { UserSchema } = require("./User")
 let Cartitem=new mongoose.Schema({
     
-    product: {
-        type:ProductSchema
+    product: { 
+     productId:String,
+        ProductName:String,
+        Image:String,
+        Rating:Number,
+    
+         
     },
     quantity:{
         type:Number,
@@ -18,12 +24,13 @@ let Cartitem=new mongoose.Schema({
        
 
 })
-let Cart= new mongoose.Schema({
-    UserId:String,
+let CartSchema= new mongoose.Schema({
+    helpid:{type:String,default:""},
+    UserId:UserSchema,
     total:{
     type:Number,
 default:0},
-    product:[Cartitem],
+    product:[{type:Cartitem}],
 
     
     
@@ -31,5 +38,5 @@ default:0},
 },{timestamps:true})
 
 Cartitem=mongoose.model("Cartitem",Cartitem)
-Cart=mongoose.model("Cart",Cart)
-module.exports={Cart,Cartitem}
+Cart=mongoose.model("Cart",CartSchema)
+module.exports={Cart,Cartitem,CartSchema}

@@ -1,23 +1,29 @@
 var jwt = require("jsonwebtoken");
 const cryptoRandomString = require("crypto-random-string");
 const multer = require("multer");
+var bcrypt = require("bcryptjs");
 const path = require("path");
 const cors = require("cors");
 const { User } = require("./Model/User");
-const  {Product}  = require("./Model/Product");
+// const payment =require('./Model/Payment')
+const { Product } = require("./Model/Product");
 const { Cartitem } = require("./Model/Cart");
 const { Cart } = require("./Model/Cart");
+const { Order } = require("./Model/Order");
 const { UserValidation } = require("./Middleware/validation");
 const bodyParser = require("body-parser");
 var schedule = require("node-schedule");
 var express = require("express");
 var app = express();
+const stripe = require("stripe")(
+  "sk_test_51HQ9l9Bl9xvRzSgFgDR5kHcwvOUGcpvskOIdLzB9O5HmVzQi4RIiFCj0UhLLZdTTuX0yfXly8174Ex64ybwOU3xC00d8KcrDHA"
+);
 var http = require("http").createServer(app);
-// var io = require("socket.io")(http, {
-//   cors: {
-//     origin: "*",
-//   },
-// });
+var io = require("socket.io")(http, {
+  cors: {
+    origin: "*",
+  },
+});
 
 app.use(bodyParser.json());
 app.use(
@@ -62,18 +68,26 @@ app.post("/forget", async (req, res) => {
     });
 });
 
-app.post("/Cart",auth, async (req, res) => {
+app.post("/Cart", auth, async (req, res) => {
+  console.log("cart data in cart", req.body);
   let sum = 0;
-  let itemcart = await Cartitem.find({});
-  // console.log(data)
+  let user = User.findOne({ _id: req.body.Userid });
+
   let cart = new Cart({
-    UserId: req.body.user,
+    helpid: req.body.Userid,
+    UserId: { ...user },
   });
-  itemcart.map((item) => {
+  req.body.cartdata.map((item) => {
     console.log("developd", item);
     sum = sum + item.price * item.quantity;
     cart.product.push({
-      product: item.product,
+      product: {
+        productId: item.id,
+        ProductName: item.productname,
+        Image: item.Image,
+        Rating: item.Rating,
+      },
+
       quantity: item.quantity,
       price: item.price,
     });
@@ -87,13 +101,82 @@ app.post("/Cart",auth, async (req, res) => {
   res.send("Hello");
 });
 
+app.post("/store/payment", auth, async (req, res) => {
+  console.log("user detail", req.body);
+  // let allcart=await Cart.find({})
+  // console.log("check desire cart",allcart)
+  //  let cartfinal;
+  //  allcart.map((item,index)=>{
+  //    console.log("item found",item)
+  //    console.log("item index",index)
+  //   if(item.UserId._id==req.body.Userid)
+  //   { console.log("match found",index)
+
+  // }})
+  //  console.log("Fianl cart",cartfinal)
+  let cart = await Cart.findOne({ helpid: req.body.Userid });
+  console.log("Cart get", cart);
+  let order = await new Order({
+    Shippingaddress: req.body.Shippingaddress,
+    Productlsit: cart,
+  });
+  //   console.log("card",cart)
+
+  // order.productID=cart
+  let user = User.findOne({ _id: req.body.Userid });
+
+  order.User = user;
+  order.helpid = req.body.Userid;
+  order
+    .save()
+    .then((d) => {
+      console.log(d);
+      res.status(200).json(d);
+      console.log("order done", d);
+      let pay = new Payment({
+        amount: req.body.amount,
+      });
+      pay.order = d;
+      pay.User = user;
+      pay
+        .save()
+        .then((d) => {
+          console.log("done", d);
+          Cart.remove({ helpid: req.body.Userid })
+            .then((d) => console.log(d))
+            .catch((e) => console.log(e));
+          res.status(200).json(d);
+        })
+        .catch((e) => console.log(e));
+    })
+    .catch((e) => console.log(e));
+});
+
+app.get("/order",auth, (req, res) => {
+  Order.find({ helpid: req.body.Userid })
+    .then((d) => {
+      console.log("order value", d);
+      res.status(200).json({order:d});
+    })
+    .catch((e) => console.log(e));
+});
+app.post("/payment/create", async (req, res) => {
+  const amount = req.query.total;
+  console.log("this is payment from user", amount);
+  const paymentintent = await stripe.paymentIntents.create({
+    amount: amount,
+    currency: "usd",
+  });
+
+  res.status(201).send({ clientsecret: paymentintent.client_secret });
+});
+
 let image = [];
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, "./public");
   },
   filename: (req, file, cb) => {
-    
     console.log(file);
     image.push(Date.now() + path.extname(file.originalname));
     cb(null, Date.now() + path.extname(file.originalname));
@@ -102,36 +185,62 @@ const storage = multer.diskStorage({
 
 upload = multer({ storage });
 
-app.post("/image/upload",(req,res,next)=>{image=[];next()}, upload.array("image", 4), (req, res, next) => {
-  let pro = new Product(({} = req.body));
-   image.map(img=>pro.Image.push({imgkey:img}))
-  pro
-    .save()
-    .then((d) => res.status(201).json(d))
-    .catch((e) => res.status(401).json(e));
-});
+app.post(
+  "/image/upload",
+  (req, res, next) => {
+    image = [];
+    next();
+  },
+  upload.array("image", 4),
+  (req, res, next) => {
+    let pro = new Product(({} = req.body));
+    image.map((img) => pro.Image.push({ imgkey: img }));
+    pro
+      .save()
+      .then((d) => res.status(201).json(d))
+      .catch((e) => res.status(401).json(e));
+  }
+);
 
 // app.get("/product", (req, res) => {
 //  Product.find({}).then(d=>{console.log(d)
 // res.status(201).json(d);}).catch(e=>{console.log(e);res.status(401).json(e)})
-  
+
 // });
 
-app.post("/cartitem", (req, res) => {
+app.post("/cartitem", async (req, res) => {
+  let cartitem = await Cartitem.findOne({ productId: req.body.productid });
   console.log("from client", req.body);
   if (req.body.update) {
-    Cartitem.findOneAndUpdate(
-      { product: req.body.product },
-      { quantity: req.body.quantity },
-      (err, update) => {
-        if (err) console.log(err);
-        console.log(update);
-        res.status(200).json(update);
-      }
-    );
+    if (req.body.update == "INC") {
+      Cartitem.findOneAndUpdate(
+        { product: req.body.productid },
+        { quantity: cartitem.quantity + 1 },
+        (err, update) => {
+          if (err) console.log(err);
+          console.log(update);
+          res.status(200).json(update);
+        }
+      );
+    } else {
+      Cartitem.findOneAndUpdate(
+        { product: req.body.productid },
+        { quantity: cartitem.quantity + 1 },
+        (err, update) => {
+          if (err) console.log(err);
+          console.log(update);
+          res.status(200).json(update);
+        }
+      );
+    }
   } else {
     let item = new Cartitem({
-      product: req.body.product,
+      product: {
+        productId: req.body.product.id,
+        ProductName: req.body.product.ProductName,
+        Image: req.body.product.Image,
+        Rating: req.body.product.Rating,
+      },
       quantity: req.body.quantity,
       price: req.body.price,
     });
@@ -142,19 +251,33 @@ app.post("/cartitem", (req, res) => {
   }
 });
 
+app.get("/detail/:productid", (req, res) => {
+  console.log(req.params);
+  if (req.params.productid) {
+    Product.findOne({ _id: req.params.productid })
+      .then((d) => res.status(200).json(d))
+      .catch((e) => res.status(401).json(e));
+  }
+});
+app.get("/getcart", (req, res) => {
+  console.log("getcart called");
+  Cartitem.find({})
+    .then((d) => {
+      console.log(d), res.status(200).json(d);
+    })
+    .catch((e) => res.status(200).json(e));
+});
 
-app.get('/detail/:productid',(req, res) => {
-  console.log(req.params)
-  if(req.params.productid){
-    Product.findOne({_id:req.params.productid})
-    .then((d) => res.status(200).json(d))
-    .catch((e) => res.status(401).json(e));
- }
-
-
-})
-app.get("/product/", (req, res) => {
-
+app.post("/removecartid", (req, res) => {
+  Cartitem.delete({ _id: req.body.cartid })
+    .then((d) => console.log(d))
+    .then((e) => console.log(e));
+  res.status(200).json({ mg: "done" });
+});
+app.get("/product", (req, res) => {
+  Cartitem.remove()
+    .then((d) => console.log(d))
+    .catch((d) => console.log(e));
   Product.find({})
     .then((d) => res.status(200).json(d))
     .catch((e) => res.status(401).json(e));
@@ -195,22 +318,57 @@ app.post("/newpass/:token", (req, res) => {
   }
 });
 
-app.post("/registration", (req, res) => {
+
+const validatedata=(req,res,next)=>{
+  let userNamepattern = /^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9]).{6,}$/;
+  let emailpattern = /^(([^<>()[\]\.,;:\s@\"]+(\.[^<>()[\]\.,;:\s@\"]+)*)|(\".+\"))@(([^<>()[\]\.,;:\s@\"]+\.)+[^<>()[\]\.,;:\s@\"]{2,})$/;
+  let passwordpattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+
+if (
+      userNamepattern.test(UserName) &&
+      emailpattern.test(Email) &&
+      passwordpattern.test(password)
+    )
+    {
+      next()
+    }
+    else{
+      res.status(401).json("false")
+    }
+
+
+
+}
+
+
+app.post("/registration",validatedata, async (req, res) => {
   console.log("value data", req.body);
-  let newuser = new User({
+  User.findOne({Email:req.body.Email}).then(async d=>{
+    if(!d){
+      res.status(200).json({Email:"Email Already exist!"});
+    }else{
+       let newuser = new User({
     Email: req.body.Email,
     UserName: req.body.UserName,
-    Password: req.body.Password,
-  });
+    
+  }); 
+  Password=await user.generateHashedPassword();
   newuser
     .save()
     .then((d) => {
       console.log("data add", d);
       res.status(200).json("True");
     })
-    .catch((e) => res.status(200).json("false"));
+    .catch((e) => res.status(401).json("false"));
+    }
+  })
+
+ 
 });
+
 const nodemailer = require("nodemailer");
+const Payment = require("./Model/Payment");
+const Commit = require("./Model/Commit");
 
 // async..await is not allowed in global scope, must use a wrapper
 async function main(link) {
@@ -251,15 +409,25 @@ async function main(link) {
 
 app.post("/login", (req, res) => {
   console.log("values", req.body);
-  User.findOne({ Email: req.body.Email, Password: req.body.password })
+  User.findOne({ Email: req.body.Email })
     .then((d) => {
+      if(d){
       console.log("Data", d);
-      var token = jwt.sign({ id: d._id }, "Tokendetail");
-      res.status(200).json(d.UserName);
-    })
+      bcrypt.compare(req.body.password, d.Password).then(d=>{
+        if(d)
+        {var token = jwt.sign({ id: d._id }, "Tokendetail")
+      res.status(200).json({token:token,user:d});}
+      })
+      
+    }else
+  {
+    res.status(200).json({invalid:"Invalid Credential"})
+  }}
+    
+    )
     .catch((e) => {
       console.log(e);
-      res.status(401).json("Invalid credential");
+      res.status(401).json("Invalid Credential");
     });
 });
 function auth(req, res, next) {
@@ -269,12 +437,14 @@ function auth(req, res, next) {
     try {
       let user = jwt.verify(token, "Tokendetail");
       console.log("user", user);
-      res.status(200).json(user);
+      req.body.Userid = user.id;
+      next();
+      // res.status(200).json(user);
     } catch (e) {
       res.status(401).json(e);
     }
   } else {
-    res.status(401).json(e);
+    res.status(401).json("LoginFirst");
   }
 }
 app.get("/data", auth, (req, res) => {
@@ -295,15 +465,37 @@ app.get("/data", auth, (req, res) => {
 //   res.send("jjj")
 // })
 
-// io.on("connection",(socket)=>{
-//     socket.on("message",(message)=>{
-//         MA.push(message)
-//         console.log(message)
-//     io.emit("message",{message})
-//         })
-//      console.log("user",socket.id)
-// })
+app.get('/Commit',(req,res)=>{
 
-app.listen(port, () => {
+  Commit.find({}).then(
+    d=>{
+      res.status(200).json(d)
+    }
+  ).catch(e=>console.log(e))
+})
+
+io.on("connection",(socket)=>{
+ console.log("connected")
+    socket.on("message",(message)=>{
+     let msg=new Commit()
+     console.log("message",message)
+      if(message.user){
+       
+       msg.User=message.user,
+         msg.Message=message.message
+       }
+       else{
+        msg.Message=message.message;
+       }
+       msg.save().then(d=>{
+io.emit("message",{message})
+       }).catch(e=>console.log(e))
+          
+   
+        })
+     console.log("user",socket.id)
+})
+
+http.listen(port, () => {
   console.log(`Example app listening at http://localhost:${port}`);
 });
