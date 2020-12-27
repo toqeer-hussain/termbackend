@@ -325,9 +325,9 @@ const validatedata=(req,res,next)=>{
   let passwordpattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
 if (
-      userNamepattern.test(UserName) &&
-      emailpattern.test(Email) &&
-      passwordpattern.test(password)
+      userNamepattern.test(req.body.UserName) &&
+      emailpattern.test(req.body.Email) &&
+      passwordpattern.test(req.body.password)
     )
     {
       next()
@@ -343,25 +343,27 @@ if (
 
 app.post("/registration",validatedata, async (req, res) => {
   console.log("value data", req.body);
-  User.findOne({Email:req.body.Email}).then(async d=>{
-    if(!d){
+  let user=await User.findOne({Email:req.body.Email})
+  console.log("user",user)
+    if(user){
+     console.log("exits")
       res.status(200).json({Email:"Email Already exist!"});
     }else{
-       let newuser = new User({
-    Email: req.body.Email,
-    UserName: req.body.UserName,
-    
-  }); 
-  Password=await user.generateHashedPassword();
-  newuser
-    .save()
+
+
+  let user = new User();
+  user.UserName = req.body.UserName;
+  user.Email = req.body.Email;
+  user.Password = req.body.password;
+  await user.generateHashedPassword();
+  console.log("before save")
+  user.save()
     .then((d) => {
       console.log("data add", d);
       res.status(200).json("True");
-    })
-    .catch((e) => res.status(401).json("false"));
-    }
-  })
+    }).catch(e=>console.log("not save",e))}
+   
+ 
 
  
 });
@@ -407,28 +409,36 @@ async function main(link) {
   // Preview URL: https://ethereal.email/message/WaQKMgKddxQDoou...
 }
 
-app.post("/login", (req, res) => {
+app.post("/login",async (req, res) => {
   console.log("values", req.body);
-  User.findOne({ Email: req.body.Email })
-    .then((d) => {
-      if(d){
-      console.log("Data", d);
-      bcrypt.compare(req.body.password, d.Password).then(d=>{
-        if(d)
-        {var token = jwt.sign({ id: d._id }, "Tokendetail")
-      res.status(200).json({token:token,user:d});}
-      })
+
+  let user = await User.findOne({ Email: req.body.Email });
+  if (!user) return res.status(400).send("User Not Registered");
+  let isValid = await bcrypt.compare(req.body.password, user.Password);
+  if (!isValid) return   res.status(200).json({invalid:"Invalid Credential"})
+  var token = jwt.sign({ id: user._id }, "Tokendetail")
+   res.status(200).json({token:token,user:user});
+  // User.findOne({ Email: req.body.Email })
+  //   .then((d) => {
+  //     if(d){
+  //     console.log("Data", d);
+  //     bcrypt.compare(req.body.password, d.Password).then(d=>{
+  //       if(d)
+  //       {
+  //         var token = jwt.sign({ id: d._id }, "Tokendetail")
+  //    }
+  //     })
       
-    }else
-  {
-    res.status(200).json({invalid:"Invalid Credential"})
-  }}
+  //   }else
+  // {
+  //   res.status(200).json({invalid:"Invalid Credential"})
+  // }}
     
-    )
-    .catch((e) => {
-      console.log(e);
-      res.status(401).json("Invalid Credential");
-    });
+    // )
+    // .catch((e) => {
+    //   console.log(e);
+    //   res.status(401).json("Invalid Credential");
+    // });
 });
 function auth(req, res, next) {
   let token = req.header("Authorization-token");
@@ -476,7 +486,7 @@ app.get('/Commit',(req,res)=>{
 
 io.on("connection",(socket)=>{
  console.log("connected")
-    socket.on("message",(message)=>{
+    socket.once("message",(message)=>{
      let msg=new Commit()
      console.log("message",message)
       if(message.user){
@@ -488,7 +498,7 @@ io.on("connection",(socket)=>{
         msg.Message=message.message;
        }
        msg.save().then(d=>{
-io.emit("message",{message})
+         io.emit("result",{message})
        }).catch(e=>console.log(e))
           
    
