@@ -36,8 +36,8 @@ app.use(express.static(path.join(__dirname, "public")));
 
 app.use(cors());
 
-const port = 5000;
-let MA = [];
+const port =process.env.PORT || 5000;;
+
 
 app.post("/forget", async (req, res) => {
   console.log("Email", req.body.Email);
