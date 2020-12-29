@@ -25,6 +25,7 @@ let orderSchema= new mongoose.Schema({
       ,
       Orderdate:{
           type: Date,
+          default:Date.now
 
       }
 
