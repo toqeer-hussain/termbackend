@@ -53,7 +53,7 @@ app.post("/forget", async (req, res) => {
         .then((d) => {
           console.log("return data", d.forgettoken);
           setjob(d._id);
-          main(`https://sp18-bse-026frontend.herokuapp.com/newpass/${d.forgettoken}`)
+          main(`https://sp18-bse-026frontend.herokuapp.com/newpass/${d.forgettoken}`,d.Email)
             .then((d) => {
               console.log("Email return", d);
               res.status(200).json(true);
@@ -370,7 +370,7 @@ const Payment = require("./Model/Payment");
 const Commit = require("./Model/Commit");
 
 // async..await is not allowed in global scope, must use a wrapper
-async function main(link) {
+async function main(link,reciever) {
   // Generate test SMTP service account from ethereal.email
   // Only needed if you don't have a real mail account for testing
   let testAccount = await nodemailer.createTestAccount();
@@ -388,7 +388,7 @@ async function main(link) {
   // send mail with defined transport object
   let info = await transporter.sendMail({
     from: "movie0world@gmail.com", // sender address
-    to: "toqeerhussain1224@gmail.com", // list of receivers
+    to: reciever, // list of receivers
     subject: "Reset Your Password", // Subject line
     text: "Hello world?", // plain text body
     html: `<br>${link}</br>`, // html body
