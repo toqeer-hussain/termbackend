@@ -58,11 +58,11 @@ app.post("/forget", async (req, res) => {
               console.log("Email return", d);
               res.status(200).json(true);
             })
-            .catch((e) => {res.status(200).json("from mail end");console.log(e)});
+            .catch((e) => {res.status(401).json("from mail end");console.log(e)});
         })
-        .catch((e) => {res.status(200).json("from email update end");console.log(e)});
+        .catch((e) => {res.status(401).json("from email update end");console.log(e)});
     })
-    .catch((e) =>{res.status(200).json("from email not found update end");console.log(e)});
+    .catch((e) =>{res.status(401).json("from email not found update end");console.log(e)});
 });
 
 app.post("/Cart", auth, async (req, res) => {
