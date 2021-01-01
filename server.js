@@ -53,7 +53,7 @@ app.post("/forget", async (req, res) => {
         .then((d) => {
           console.log("return data", d.forgettoken);
           setjob(d._id);
-          main(`http://localhost:3000/newpass/${d.forgettoken}`)
+          main(`https://sp18-bse-026backend.herokuapp.com/newpass/${d.forgettoken}`)
             .then((d) => {
               console.log("Email return", d);
               res.status(200).json(true);
