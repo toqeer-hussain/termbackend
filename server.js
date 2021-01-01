@@ -34,7 +34,7 @@ app.use(
 
 app.use(express.static(path.join(__dirname, "public")));
 
-app.use(cors());
+app.use(cors({origin:"*"}));
 
 const port =process.env.PORT || 5000;;
 
